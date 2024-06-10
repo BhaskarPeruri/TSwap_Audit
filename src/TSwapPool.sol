@@ -59,6 +59,7 @@ contract TSwapPool is ERC20 {
         uint256 wethWithdrawn,
         uint256 poolTokensWithdrawn
     );
+    //@audit -info 3 events should be indexed if there are more than 3 parameters
     event Swap(
         address indexed swapper,
         IERC20 tokenIn,
@@ -110,10 +111,16 @@ contract TSwapPool is ERC20 {
     /// @param maximumPoolTokensToDeposit The maximum amount of pool tokens the user is willing to deposit, again it's
     /// derived from the amount of WETH the user is going to deposit
     /// @param deadline The deadline for the transaction to be completed by
+
+    //info- this f'n used by LP's inorder to provide liquidity.
     function deposit(
         uint256 wethToDeposit,
         uint256 minimumLiquidityTokensToMint,
         uint256 maximumPoolTokensToDeposit,
+        //@audit the deadline param not used 
+        /**
+         *IMPACT: the transaction could be sent when market conditions are unfavourable to deposit.
+         */
         uint64 deadline
     )
         external
@@ -149,6 +156,7 @@ contract TSwapPool is ERC20 {
             uint256 poolTokensToDeposit = getPoolTokensToDepositBasedOnWeth(
                 wethToDeposit
             );
+            
             if (maximumPoolTokensToDeposit < poolTokensToDeposit) {
                 revert TSwapPool__MaxPoolTokenDepositTooHigh(
                     maximumPoolTokensToDeposit,
@@ -273,6 +281,7 @@ contract TSwapPool is ERC20 {
         // totalPoolTokensOfPool) + (wethToDeposit * poolTokensToDeposit) = k
         // (totalWethOfPool * totalPoolTokensOfPool) + (wethToDeposit * totalPoolTokensOfPool) = k - (totalWethOfPool *
         // poolTokensToDeposit) - (wethToDeposit * poolTokensToDeposit)
+
         uint256 inputAmountMinusFee = inputAmount * 997;
         uint256 numerator = inputAmountMinusFee * outputReserves;
         uint256 denominator = (inputReserves * 1000) + inputAmountMinusFee;
@@ -290,11 +299,13 @@ contract TSwapPool is ERC20 {
         revertIfZero(outputReserves)
         returns (uint256 inputAmount)
     {
+        //@audit info magic number
         return
             ((inputReserves * outputAmount) * 10000) /
             ((outputReserves - outputAmount) * 997);
     }
 
+    // @audit -info this should be external
     function swapExactInput(
         IERC20 inputToken,
         uint256 inputAmount,
@@ -333,7 +344,11 @@ contract TSwapPool is ERC20 {
      * @param inputToken ERC20 token to pull from caller
      * @param outputToken ERC20 token to send to caller
      * @param outputAmount The exact amount of tokens to send to caller
+     * @myself understanding user want's to buy 10 WETH  from his DAI.
+     * the swapExactOuput calculates how much DAI the user needs to input(give) inorder to get 10 WETH.
      */
+    //@audit -info missing deadline param in natspec
+   
     function swapExactOutput(
         IERC20 inputToken,
         IERC20 outputToken,
@@ -397,6 +412,8 @@ contract TSwapPool is ERC20 {
         }
 
         swap_count++;
+        //@audit -transferring more out tokens than expected tokens in the protocol
+        //breaks the protocol invariant
         if (swap_count >= SWAP_COUNT_MAX) {
             swap_count = 0;
             outputToken.safeTransfer(msg.sender, 1_000_000_000_000_000_000);
